@@ -77,6 +77,7 @@ object taks1 {
     completeDF.show(5)
     val rddV=completeDF.select("Words","rFeatures").rdd.map(r => (r(0),r(1)))
     rddV.map(x=> ((Vector)(x._2))).take(5).foreach(println)
+    //laetoih
   }
 
 }

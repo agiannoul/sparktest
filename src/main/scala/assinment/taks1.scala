@@ -4,17 +4,20 @@ import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, Word2Vec}
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.{SparkConf, SparkContext}
 import scala.util.control._
+import org.apache.spark
+import org.apache.spark.ml.clustering.KMeans
 
 import math._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{col, column, udf}
 
 object taks1 {
+  val ss = SparkSession.builder().master("local").appName("assigment").getOrCreate()
+  import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
+
   def main(args: Array[String]): Unit = {
     // Create the spark session first
-    val ss = SparkSession.builder().master("local").appName("assigment").getOrCreate()
     ss.sparkContext.setLogLevel("ERROR")
-    import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
     val inputFile = "./Greek_Parliament_Proceedings_1989_2020_Clean_V2.csv"
     //val currentDir = System.getProperty("user.dir")  // get the current directory
@@ -37,7 +40,7 @@ object taks1 {
     loop.breakable {
       for (seg <- 0 to 4) {
         val segmenteddf=dfwithseg.filter($"Segment" === seg)
-        val keywordsofsampleData=algo_topics(segmenteddf, ss)
+        val keywordsofsampleData=algo_topics(segmenteddf)
       }
     }
 
@@ -60,8 +63,8 @@ object taks1 {
   }
 
 
-  def algo_topics(notnulldf: DataFrame, ss: SparkSession): Array[String] = {
-    import ss.implicits._
+  def algo_topics(notnulldf: DataFrame): Array[String] = {
+
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
     val newDF = notnulldf.select($"member_name", udf_clean($"clean_speech").as("cleaner")).persist()
@@ -89,7 +92,6 @@ object taks1 {
     val resultDf = modelw.transform(wordsDF)
 
 
-    import org.apache.spark.ml.clustering.KMeans
 
     val featureDf = resultDf.withColumnRenamed("result", "features")
     val kmeans = new KMeans().setK(5).setSeed(1L).setMaxIter(100)
@@ -129,70 +131,73 @@ object taks1 {
 
     // Given a group of speeches extract  most representative keywords.
 
-    // method-1 keep k most significant words per speech. Then keep top n frequent words.
-    def method1keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int) {
-      val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
-        var sign_words = List[String]()
-        val k = 5
-        for (i <- 0 until min(k, Words.size)) {
-          val maxx = tfidf.reduceLeft(_ max _)
-          val indexmax = tfidf.indexOf(maxx)
-          val wordd = Words(indexmax)
-          sign_words = sign_words ::: List(wordd)
-          tfidf(indexmax) = -1
-        }
-        sign_words
-      })
 
-      val mswords = completeTF_IDF_DF.select(most_significant_k($"Words", $"tf_idf_value").as("sign_words"))
-      mswords.show(10, false)
-      val rdd = mswords.rdd
-      val rdd0 = rdd.map(_ (0).asInstanceOf[Seq[String]]).flatMap(x => x).map(word => (word, 1)).reduceByKey(_ + _).map(x => (x._2, x._1)) //.sortByKey(false)
-      rdd0.filter(x => !filterstopwords(x._2)).top(n).foreach(println)
-      rdd0.top(n).map(x => x._2)
-    }
 
     // method-2
-    def method2keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int): Array[String] = {
-      val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
-        var sign_words = List[String]()
-        for (i <- 0 until min(k, Words.size)) {
-          val maxx = tfidf.reduceLeft(_ max _)
-          val indexmax = tfidf.indexOf(maxx)
-          val wordd = Words(indexmax)
-          sign_words = sign_words ::: List(wordd)
-          tfidf(indexmax) = -1
-        }
-        sign_words
-      })
-      val most_significant_k_tfidf = udf((Words: List[String], tfidf: Array[Double]) => {
-        var sign_words = List[String]()
-        var sign_tfidf = List[Double]()
-        for (i <- 0 until min(k, Words.size)) {
-          val maxx = tfidf.reduceLeft(_ max _)
-          val indexmax = tfidf.indexOf(maxx)
-          val wordd = Words(indexmax)
-          sign_words = sign_words ::: List(wordd)
-          sign_tfidf = sign_tfidf ::: List(maxx)
-          tfidf(indexmax) = -1
-        }
-        sign_tfidf
-      })
 
-      val mswords = completeTF_IDF_DF.select(most_significant_k($"Words", $"tf_idf_value").as("sign_words"), $"dist", most_significant_k_tfidf($"Words", $"tf_idf_value").as("sign_tf_idf"))
-      val rdd = mswords.rdd
-      val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Double], row(2).asInstanceOf[Seq[Double]])).map(x => (x._1.head, x._3.head / x._2)).reduceByKey(max).map(x => (x._2, x._1))
-      // val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Double])).map(x => (x._1.head, x._2)).reduceByKey(min).map(x => (x._2, x._1)).sortByKey(true)
-      rdd0.filter(x => !filterstopwords(x._2)).top(n).foreach(println)
-      //rdd0.filter(x => !filterstopwords(x._2)).take(n).foreach(println)
-      rdd0.top(n).map(x => x._2)
-      //rdd0.take(n).map(x=>x._2)
-    }
 
     val keywords = method2keywords(completeTF_IDF_DF, 40, 1)
     keywords
 
   }
+  // method-1 keep k most significant words per speech. Then keep top n frequent words.
+  def method1keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int) {
+    val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
+      var sign_words = List[String]()
+      val k = 5
+      for (i <- 0 until min(k, Words.size)) {
+        val maxx = tfidf.reduceLeft(_ max _)
+        val indexmax = tfidf.indexOf(maxx)
+        val wordd = Words(indexmax)
+        sign_words = sign_words ::: List(wordd)
+        tfidf(indexmax) = -1
+      }
+      sign_words
+    })
 
+    val mswords = completeTF_IDF_DF.select(most_significant_k($"Words", $"tf_idf_value").as("sign_words"))
+    mswords.show(10, false)
+    val rdd = mswords.rdd
+    val rdd0 = rdd.map(_ (0).asInstanceOf[Seq[String]]).flatMap(x => x).map(word => (word, 1)).reduceByKey(_ + _).map(x => (x._2, x._1)) //.sortByKey(false)
+    rdd0.filter(x => !filterstopwords(x._2)).top(n).foreach(println)
+    rdd0.top(n).map(x => x._2)
+  }
+
+
+  def method2keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int): Array[String] = {
+    val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
+      var sign_words = List[String]()
+      for (i <- 0 until min(k, Words.size)) {
+        val maxx = tfidf.reduceLeft(_ max _)
+        val indexmax = tfidf.indexOf(maxx)
+        val wordd = Words(indexmax)
+        sign_words = sign_words ::: List(wordd)
+        tfidf(indexmax) = -1
+      }
+      sign_words
+    })
+    val most_significant_k_tfidf = udf((Words: List[String], tfidf: Array[Double]) => {
+      var sign_words = List[String]()
+      var sign_tfidf = List[Double]()
+      for (i <- 0 until min(k, Words.size)) {
+        val maxx = tfidf.reduceLeft(_ max _)
+        val indexmax = tfidf.indexOf(maxx)
+        val wordd = Words(indexmax)
+        sign_words = sign_words ::: List(wordd)
+        sign_tfidf = sign_tfidf ::: List(maxx)
+        tfidf(indexmax) = -1
+      }
+      sign_tfidf
+    })
+
+    val mswords = completeTF_IDF_DF.select(most_significant_k($"Words", $"tf_idf_value").as("sign_words"), $"dist", most_significant_k_tfidf($"Words", $"tf_idf_value").as("sign_tf_idf"))
+    val rdd = mswords.rdd
+    val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Double], row(2).asInstanceOf[Seq[Double]])).map(x => (x._1.head, x._3.head / x._2)).reduceByKey(max).map(x => (x._2, x._1))
+    // val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Double])).map(x => (x._1.head, x._2)).reduceByKey(min).map(x => (x._2, x._1)).sortByKey(true)
+    rdd0.filter(x => !filterstopwords(x._2)).top(n).foreach(println)
+    //rdd0.filter(x => !filterstopwords(x._2)).take(n).foreach(println)
+    rdd0.top(n).map(x => x._2)
+    //rdd0.take(n).map(x=>x._2)
+  }
 
 }

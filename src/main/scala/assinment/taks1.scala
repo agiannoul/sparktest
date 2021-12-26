@@ -31,7 +31,7 @@ object taks1 {
       //sample set
       //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
       //ALL set
-      val notnulldf = basicDF.filter(basicDF("member_name").isNotNull && basicDF("clean_speech").isNotNull)
+      val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
       //val keywordsofsampleData=algo_topics(notnulldf, ss)
       val Seg = 5
@@ -214,6 +214,9 @@ object taks1 {
 
 
     rdd0.filter(x => !filterstopwords(x._2)).top(n).foreach(println)
+    println("")
+    println("")
+    println("")
     //rdd0.filter(x => !filterstopwords(x._2)).take(n).foreach(println)
     rdd0.top(n).map(x => x._2)
     //rdd0.take(n).map(x=>x._2)

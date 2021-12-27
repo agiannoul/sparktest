@@ -153,7 +153,7 @@ object taks1 {
   def method1keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int) {
     val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
       var sign_words = List[String]()
-      val k = 5
+      val k = 40
       for (i <- 0 until min(k, Words.size)) {
         val maxx = tfidf.reduceLeft(_ max _)
         val indexmax = tfidf.indexOf(maxx)

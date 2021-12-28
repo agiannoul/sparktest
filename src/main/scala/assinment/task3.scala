@@ -1,5 +1,6 @@
 package assinment
 
+import assinment.taks1.algo_topics
 import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, Word2Vec}
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -10,10 +11,13 @@ import org.apache.spark.ml.clustering.KMeans
 
 import math._
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{col, collect_list, column, concat, concat_ws, udf}
+import org.apache.spark.sql.functions.{col, collect_list, column, concat, concat_ws, lit, udf}
+
+import scala.collection.mutable.ListBuffer
 object task3 {
   val ss = SparkSession.builder().master("local[*]").appName("assigment").getOrCreate()
   import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
+
   def main(args: Array[String]): Unit = {
     // Create the spark session first
     ss.sparkContext.setLogLevel("ERROR")
@@ -25,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.01, 1234)
+    val sampleDF = basicDF//.sample(0.1, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
@@ -34,14 +38,52 @@ object task3 {
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
     val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech"))).persist()
-    //group by member and concat all speeches
-    val member_groupDf=newDF.select($"member_name",$"cleaner").groupBy($"member_name").agg(concat_ws(" ",collect_list("cleaner")).as("grouped_speeches"))
 
-    // tokenize
-    val tokenizer = new Tokenizer().setInputCol("grouped_speeches").setOutputCol("Words")
-    val wordsDF = tokenizer.transform(member_groupDf)
+    //political_party,member_name
+    val Seg = 1 //1 d-> for each year
+    val udf_segmentTime = udf((v: String) => (v.takeRight(4).toInt - 1989) / Seg)
+    val dfwithseg = newDF.select($"member_name", $"political_party", $"cleaner", udf_segmentTime($"sitting_date").as("Segment"))
 
-    //TF-EDF
+    var dflist =ListBuffer[DataFrame]()
+    var dfsegs =ListBuffer[Int]()
+    val loop = new Breaks;
+    loop.breakable {
+      for (seg <- 0 to 30) {
+        println(seg)
+        val segmenteddf = dfwithseg.filter($"Segment" === seg).persist()
+        if(segmenteddf.rdd.count()!=0) {
+          val tempdf = groupedAnalysis(segmenteddf, "political_party", 50)
+          val dfwithsegment = tempdf.withColumn("Segment", lit(seg))
+          dflist.append(dfwithsegment)
+          dfsegs.append(seg)
+        }
+      }
+    }
+
+    //see keyowrds accross years for specific party νεα δημοκρατια
+    val colname="political_party"
+    val row=dflist(0).select(col(colname)).distinct().collect()
+    row.foreach(println)
+    for (seg <- 0 to dflist.size-1){
+      val row=dflist(seg).select(col(colname).contains("κομμουνιστικο")).take(1)(0)
+      println(row)
+    }
+
+    //groupedAnalysis(newDF,"political_party",50)
+    //signleAnalysis(newDF,"political_party",50)
+
+
+  }
+
+  // Tf-IDf in speeches of sing;e member/party
+  // take to 40 words
+  def analysisOfspecificmemberDf(name :String,specific_member_df: DataFrame,N:Int): (String,Array[String],Array[Double])={
+
+
+    val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
+    val wordsDF = tokenizer.transform(specific_member_df)
+
+    //TF-IDF
     val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
     val featurizedDF = hashingTF.transform(wordsDF)
 
@@ -53,7 +95,7 @@ object task3 {
     val udf_Values_Vector = udf((v: SparseVector) => v.values)
     val udf_Values_TfVector = udf((v: SparseVector) => v.values.map(x => x / v.values.size))
 
-    val complete_valuesDF = completeDF.select($"Words", $"member_name", $"grouped_speeches",  udf_Values_TfVector($"rRawFeatures").as("tf_value"), udf_Values_Vector($"rFeatures").as("idf_value"))
+    val complete_valuesDF = completeDF.select($"Words",  udf_Values_TfVector($"rRawFeatures").as("tf_value"), udf_Values_Vector($"rFeatures").as("idf_value"))
 
     val udf_tf_idf = udf((tf: Array[Double], idf: Array[Double]) => {
       for (i <- 0 to idf.length - 1) {
@@ -62,28 +104,120 @@ object task3 {
       tf
     })
 
-    val complete_tf_idf_DF = complete_valuesDF.select($"Words", $"member_name", $"grouped_speeches",$"tf_value",$"idf_value",udf_tf_idf($"tf_value", $"idf_value").as("tf_idf_value"))
+    val complete_tf_idf_DF = complete_valuesDF.select($"Words",udf_tf_idf($"tf_value", $"idf_value").as("tf_idf_value"))
+
+    // df -> key(word) , value(tf*idf) rdd
+    val rdd = complete_tf_idf_DF.rdd
+    val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Seq[String]])).map( x => {
+      var concated = ListBuffer[String]()
+      for (i <- 0 until min(x._1.size,x._2.size)) {
+        concated.append(x._1(i)+" _ "+x._2(i))
+      }
+      concated
+    }).flatMap(x=>x).map(x=> (x.split(" _ ")(0), x.split(" _ ")(1).toDouble )).reduceByKey(max).map(x => (x._2, x._1))
+    val top40=rdd0.top(min(N,rdd0.count()).asInstanceOf[Int])
+    val top_words=top40.map(x=>x._2)
+    val top_tfidf=top40.map(x=>x._1)
+    (name,top_words,top_tfidf)
+
+  }
+  // filter df based on names of members/parties
+  def signleAnalysis(newDF :DataFrame, colunName1 : String,N :Int):Any ={
+    val colunName=colunName1
+    val distingsmember=newDF.select(col(colunName)).rdd.map(row => row(0).asInstanceOf[String]).distinct()
+    val member_keyword=distingsmember.collect().map(name=>{
+      val specific_member_df=newDF.filter(col(colunName).equalTo(name))
+      val tirple=analysisOfspecificmemberDf(name,specific_member_df,N)
+      tirple
+    })
+
+    //print
+    /*
+    member_keyword.take(10).foreach(x=>{
+      print(x._1+" ")
+      x._2.foreach(a=>print(a+","))
+      print(" | ")
+      x._3.foreach(a=>print(a+","))
+      println()
+    })
+    */
+  }
+
+
+
+
+
+  // Group by member/party and concat speeches, then calculate tf-idf and select top 40/k
+  def groupedAnalysis(newDF :DataFrame, colunName1 : String,N :Int): DataFrame={
+    //group by member and concat all speeches
+    val colunName :String =colunName1
+    val member_groupDf=newDF.select(col(colunName),$"cleaner").groupBy(col(colunName)).agg(concat_ws(" ",collect_list("cleaner")).as("grouped_speeches"))
+
+    // tokenize
+    val tokenizer = new Tokenizer().setInputCol("grouped_speeches").setOutputCol("Words")
+    val wordsDF = tokenizer.transform(member_groupDf)
+
+    //TF-IDF
+    val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
+    val featurizedDF = hashingTF.transform(wordsDF)
+
+    val idf = new IDF().setInputCol("rRawFeatures").setOutputCol("rFeatures")
+    val idfM = idf.fit(featurizedDF)
+    val completeDF = idfM.transform(featurizedDF)
+
+    //udf to keep only values of TF and IDF vector
+    val udf_Values_Vector = udf((v: SparseVector) => v.values)
+    val udf_Values_TfVector = udf((v: SparseVector) => v.values.map(x => x / v.values.size))
+
+    val complete_valuesDF = completeDF.select($"Words", col(colunName), $"grouped_speeches",  udf_Values_TfVector($"rRawFeatures").as("tf_value"), udf_Values_Vector($"rFeatures").as("idf_value"))
+
+    val udf_tf_idf = udf((tf: Array[Double], idf: Array[Double]) => {
+      for (i <- 0 to idf.length - 1) {
+        tf(i) = tf(i) * idf(i)
+      }
+      tf
+    })
+
+    val complete_tf_idf_DF = complete_valuesDF.select($"Words", col(colunName), $"grouped_speeches",$"tf_value",$"idf_value",udf_tf_idf($"tf_value", $"idf_value").as("tf_idf_value"))
 
     val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
       var sign_words = List[String]()
       val k = 40
       for (i <- 0 until min(k, Words.size)) {
         val maxx = tfidf.reduceLeft(_ max _)
-        val indexmax = tfidf.indexOf(maxx)
-        val wordd = Words(indexmax)
-        sign_words = sign_words ::: List(wordd)
-        tfidf(indexmax) = -1
+        if(maxx != -1) {
+          val indexmax = tfidf.indexOf(maxx)
+          val wordd = Words(indexmax)
+          sign_words = sign_words ::: List(wordd)
+          tfidf(indexmax) = -1
+        }
       }
       sign_words
     })
 
-    val signDf=complete_tf_idf_DF.select($"Words", $"member_name", $"grouped_speeches",$"tf_value",$"idf_value",$"tf_idf_value",most_significant_k($"Words",$"tf_idf_value").as("keywords"))
-    val finaldf=signDf.orderBy($"member_name").select($"member_name",$"keywords")
-
-    val udfArrayToString = udf((Words: List[String]) => {
-        Words.mkString(",")
+    val most_significant_k_tfidf = udf((Words: List[String], tfidf: Array[Double]) => {
+      var sign_words = List[String]()
+      var sign_tfidf = List[Double]()
+      val k=40
+      for (i <- 0 until min(k, Words.size)) {
+        val maxx = tfidf.reduceLeft(_ max _)
+        if(maxx != -1) {
+          val indexmax = tfidf.indexOf(maxx)
+          val wordd = Words(indexmax)
+          sign_words = sign_words ::: List(wordd)
+          sign_tfidf = sign_tfidf ::: List(maxx)
+          tfidf(indexmax) = -1
+        }
       }
-    )
 
+      sign_tfidf
+
+
+    })
+
+    val signDf=complete_tf_idf_DF.select($"Words",col(colunName), $"grouped_speeches",$"tf_value",$"idf_value",$"tf_idf_value",most_significant_k($"Words",$"tf_idf_value").as("keywords"),most_significant_k_tfidf($"Words",$"tf_idf_value").as("keywords_TFIDF"))
+    val finaldf=signDf.orderBy(col(colunName)).select(col(colunName),$"keywords",$"keywords_TFIDF")
+    //finaldf.show(false)
+    finaldf
   }
 }

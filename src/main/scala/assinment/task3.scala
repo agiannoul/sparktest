@@ -1,18 +1,18 @@
 package assinment
 
-import assinment.taks1.algo_topics
 import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, Word2Vec}
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
-import org.apache.spark.{SparkConf, SparkContext}
 
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 import scala.util.control._
-import org.apache.spark
-import org.apache.spark.ml.clustering.KMeans
-
 import math._
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{col, collect_list, column, concat, concat_ws, lit, udf}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.functions.{array, col, collect_list, column, concat, concat_ws, lit, udf}
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, IntegerType, StringType, StructField, StructType}
 
+import java.awt.Color
+import java.io.File
 import scala.collection.mutable.ListBuffer
 object task3 {
   val ss = SparkSession.builder().master("local[*]").appName("assigment").getOrCreate()
@@ -29,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF//.sample(0.1, 1234)
+    val sampleDF = basicDF.sample(0.5, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
@@ -43,36 +43,152 @@ object task3 {
     val Seg = 1 //1 d-> for each year
     val udf_segmentTime = udf((v: String) => (v.takeRight(4).toInt - 1989) / Seg)
     val dfwithseg = newDF.select($"member_name", $"political_party", $"cleaner", udf_segmentTime($"sitting_date").as("Segment"))
+    dfwithseg.persist()
+    val colname="political_party"
 
-    var dflist =ListBuffer[DataFrame]()
-    var dfsegs =ListBuffer[Int]()
+    //analysis for each year
+
+    //create empty dataframe
+    val schema = new StructType()
+      .add(colname, StringType)
+      .add("keywords", ArrayType(StringType))
+      .add("keywords_TFIDF", ArrayType(DoubleType))
+      .add("Segment", IntegerType)
+
+
+    var dfAllyears = ss.createDataFrame(ss.sparkContext
+      .emptyRDD[Row],schema)
     val loop = new Breaks;
+    var firstTime:Boolean= true
     loop.breakable {
       for (seg <- 0 to 30) {
         println(seg)
-        val segmenteddf = dfwithseg.filter($"Segment" === seg).persist()
-        if(segmenteddf.rdd.count()!=0) {
-          val tempdf = groupedAnalysis(segmenteddf, "political_party", 50)
+        val segmenteddf = dfwithseg.filter($"Segment" === seg)
+        if(!segmenteddf.isEmpty) {
+          val tempdf = groupedAnalysis(segmenteddf, colname, 50)
           val dfwithsegment = tempdf.withColumn("Segment", lit(seg))
-          dflist.append(dfwithsegment)
-          dfsegs.append(seg)
+          dfAllyears =dfAllyears.union(dfwithsegment)
         }
       }
+
     }
 
-    //see keyowrds accross years for specific party νεα δημοκρατια
-    val colname="political_party"
-    val row=dflist(0).select(col(colname)).distinct().collect()
-    row.foreach(println)
-    for (seg <- 0 to dflist.size-1){
-      val row=dflist(seg).select(col(colname).contains("κομμουνιστικο")).take(1)(0)
-      println(row)
-    }
+    //dfAllyears df has colums:  col(colunName),$"keywords",$"keywords_TFIDF","Segment"
+    val allrdd=dfAllyears.map(row => (row(0).asInstanceOf[String],row(1).asInstanceOf[Seq[String]],row(2).asInstanceOf[Seq[Double]],row(3).asInstanceOf[Int]))
+    val partiesrdd  = allrdd.rdd.groupBy(_._1).map(r=>(r._1,dotmatrix(r._2)))
+
+
+    partiesrdd.foreach(x=> {
+      /*println(x._1+" :")
+      print("[ ")
+      for(ar <- x._2._1){
+        print("[ ")
+        for(item <- ar){
+          print(item+", ")
+        }
+        print("]")
+        println()
+      }
+      print("]")
+      println()
+      println()
+      */
+      imagecreation(x._2._1,x._1.replaceAll(" ","_"))
+    })
+
+
+
 
     //groupedAnalysis(newDF,"political_party",50)
     //signleAnalysis(newDF,"political_party",50)
 
 
+  }
+
+  case class Members(name: String, keywords: Seq[String],keywords_TFIDF: Seq[Double],seg: Int)
+
+
+  def imagecreation(yourmatrix: Array[Array[Double]],name:String){
+    val width = yourmatrix.length
+    val height = yourmatrix(0).length
+    val image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+    try {
+
+      var i = 0
+      while ( {
+        i < height
+      }) {
+        var j = 0
+        while ( {
+          j < width
+        }) {
+          val u = yourmatrix(i)(j)*(255.0/yourmatrix(i).max)
+          val myWhite :Color = new Color(u.toInt, u.toInt, u.toInt); // Color white
+          image.setRGB(i,j,myWhite.getRGB)
+
+          j += 1
+        }
+
+        i += 1
+      }
+      ImageIO.write(image, "jpg", new File("./tmp/spark_output/"+name+"_image.jpg"))
+
+    } catch {
+      case e: Exception =>
+      e.printStackTrace()
+    }
+  }
+
+
+  def dotmatrix(segmentunroder :Iterable[(String,Seq[String],Seq[Double],Int)] ): (Array[Array[Double]],List[Int]) ={
+    val dotMatrix= Array.ofDim[Double](segmentunroder.size, segmentunroder.size)
+    val segmentIndex =ListBuffer[Int]()
+    var countseg=0
+    val segment = segmentunroder.toArray.sortBy(x=> x._4)
+    for(seg <- segment){
+      var countInseg=0
+      for(inseg <-segment){
+        var dotproduct : Double = 0
+        val iteratedWords= ListBuffer[String]()
+        for(word <- seg._2){
+
+          val Inindex= inseg._2.indexOf(word)
+          if(Inindex != -1 && !iteratedWords.contains(word)) {
+            iteratedWords.append(word)
+            //println(" index:"+Inindex+" idfs:"+inseg._3.size+" words:"+inseg._2.size)
+            val Segindex = seg._2.indexOf(word)
+            //dotproduct += inseg._3(Inindex) * seg._3(Segindex)
+            //dotproduct += max(inseg._3(Inindex) , seg._3(Segindex))
+            dotproduct +=1
+          }
+        }
+        dotMatrix(countseg)(countInseg)=dotproduct
+        countInseg+=1
+      }
+      segmentIndex.append(seg._4)
+      countseg+=1
+    }
+    /*
+    //normallization based on diagonal values
+    var i=0
+    for(ar <-dotMatrix){
+      var j=0
+      for(value <- ar){
+        if(i != j){
+          val normalized = value/dotMatrix(i)(i)
+          dotMatrix(i)(j)=normalized
+        }
+        j+=1
+      }
+      i+=1
+    }
+    i=0
+    for(ar <-dotMatrix){
+      dotMatrix(i)(i)=1
+      i+=1
+    }
+  */
+    (dotMatrix,segmentIndex.toList)
   }
 
   // Tf-IDf in speeches of sing;e member/party
@@ -148,6 +264,7 @@ object task3 {
 
 
   // Group by member/party and concat speeches, then calculate tf-idf and select top 40/k
+  // return df with columns col(colunName),$"keywords",$"keywords_TFIDF"
   def groupedAnalysis(newDF :DataFrame, colunName1 : String,N :Int): DataFrame={
     //group by member and concat all speeches
     val colunName :String =colunName1
@@ -182,7 +299,7 @@ object task3 {
 
     val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
       var sign_words = List[String]()
-      val k = 40
+      val k = N
       for (i <- 0 until min(k, Words.size)) {
         val maxx = tfidf.reduceLeft(_ max _)
         if(maxx != -1) {

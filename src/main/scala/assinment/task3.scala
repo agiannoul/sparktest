@@ -15,7 +15,7 @@ import java.awt.Color
 import java.io.File
 import scala.collection.mutable.ListBuffer
 object task3 {
-  val ss = SparkSession.builder().master("local[*]").appName("assigment").getOrCreate()
+  val ss = SparkSession.builder().master("local[8]").appName("assigment").config("spark.driver.memory","6g").config("spark.executor.memory","2g").getOrCreate()
   import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
   def main(args: Array[String]): Unit = {
@@ -29,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.5, 1234)
+    val sampleDF = basicDF//.sample(0.5, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
@@ -37,13 +37,12 @@ object task3 {
 
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
-    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech"))).persist()
+    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech")))
 
     //political_party,member_name
     val Seg = 1 //1 d-> for each year
     val udf_segmentTime = udf((v: String) => (v.takeRight(4).toInt - 1989) / Seg)
     val dfwithseg = newDF.select($"member_name", $"political_party", $"cleaner", udf_segmentTime($"sitting_date").as("Segment"))
-    dfwithseg.persist()
     val colname="political_party"
 
     //analysis for each year
@@ -59,6 +58,7 @@ object task3 {
     var dfAllyears = ss.createDataFrame(ss.sparkContext
       .emptyRDD[Row],schema)
     val loop = new Breaks;
+    dfwithseg.cache()
     var firstTime:Boolean= true
     loop.breakable {
       for (seg <- 0 to 30) {
@@ -72,13 +72,14 @@ object task3 {
       }
 
     }
+    dfwithseg.unpersist()
 
     //dfAllyears df has colums:  col(colunName),$"keywords",$"keywords_TFIDF","Segment"
     val allrdd=dfAllyears.map(row => (row(0).asInstanceOf[String],row(1).asInstanceOf[Seq[String]],row(2).asInstanceOf[Seq[Double]],row(3).asInstanceOf[Int]))
     val partiesrdd  = allrdd.rdd.groupBy(_._1).map(r=>(r._1,dotmatrix(r._2)))
 
 
-    partiesrdd.foreach(x=> {
+    partiesrdd.collect().foreach(x=> {
       /*println(x._1+" :")
       print("[ ")
       for(ar <- x._2._1){

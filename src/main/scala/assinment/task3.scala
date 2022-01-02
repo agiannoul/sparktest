@@ -29,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF//.sample(0.5, 1234)
+    val sampleDF = basicDF.sample(0.5, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
@@ -210,21 +210,14 @@ object task3 {
 
     //udf to keep only values of TF and IDF vector
     val udf_Values_Vector = udf((v: SparseVector) => v.values)
-    val udf_Values_TfVector = udf((v: SparseVector) => v.values.map(x => x / v.values.size))
 
-    val complete_valuesDF = completeDF.select($"Words",  udf_Values_TfVector($"rRawFeatures").as("tf_value"), udf_Values_Vector($"rFeatures").as("idf_value"))
+    val complete_valuesDF = completeDF.select($"Words", udf_Values_Vector($"rFeatures").as("tf_idf_value"))
 
-    val udf_tf_idf = udf((tf: Array[Double], idf: Array[Double]) => {
-      for (i <- 0 to idf.length - 1) {
-        tf(i) = tf(i) * idf(i)
-      }
-      tf
-    })
 
-    val complete_tf_idf_DF = complete_valuesDF.select($"Words",udf_tf_idf($"tf_value", $"idf_value").as("tf_idf_value"))
+
 
     // df -> key(word) , value(tf*idf) rdd
-    val rdd = complete_tf_idf_DF.rdd
+    val rdd = complete_valuesDF.rdd
     val rdd0 = rdd.map(row => (row(0).asInstanceOf[Seq[String]], row(1).asInstanceOf[Seq[String]])).map( x => {
       var concated = ListBuffer[String]()
       for (i <- 0 until min(x._1.size,x._2.size)) {
@@ -285,9 +278,8 @@ object task3 {
 
     //udf to keep only values of TF and IDF vector
     val udf_Values_Vector = udf((v: SparseVector) => v.values)
-    val udf_Values_TfVector = udf((v: SparseVector) => v.values.map(x => x / v.values.size))
 
-    val complete_valuesDF = completeDF.select($"Words", col(colunName), $"grouped_speeches",  udf_Values_TfVector($"rRawFeatures").as("tf_value"), udf_Values_Vector($"rFeatures").as("idf_value"))
+    val complete_valuesDF = completeDF.select($"Words", col(colunName), $"grouped_speeches", udf_Values_Vector($"rFeatures").as("tf_idf_value"))
 
     val udf_tf_idf = udf((tf: Array[Double], idf: Array[Double]) => {
       for (i <- 0 to idf.length - 1) {
@@ -296,7 +288,6 @@ object task3 {
       tf
     })
 
-    val complete_tf_idf_DF = complete_valuesDF.select($"Words", col(colunName), $"grouped_speeches",$"tf_value",$"idf_value",udf_tf_idf($"tf_value", $"idf_value").as("tf_idf_value"))
 
     val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
       var sign_words = List[String]()
@@ -333,7 +324,7 @@ object task3 {
 
     })
 
-    val signDf=complete_tf_idf_DF.select($"Words",col(colunName), $"grouped_speeches",$"tf_value",$"idf_value",$"tf_idf_value",most_significant_k($"Words",$"tf_idf_value").as("keywords"),most_significant_k_tfidf($"Words",$"tf_idf_value").as("keywords_TFIDF"))
+    val signDf=complete_valuesDF.select($"Words",col(colunName), $"grouped_speeches",$"tf_idf_value",most_significant_k($"Words",$"tf_idf_value").as("keywords"),most_significant_k_tfidf($"Words",$"tf_idf_value").as("keywords_TFIDF"))
     val finaldf=signDf.orderBy(col(colunName)).select(col(colunName),$"keywords",$"keywords_TFIDF")
     //finaldf.show(false)
     finaldf

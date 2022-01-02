@@ -1,8 +1,9 @@
 package assinment
 
 import assinment.taks1.worsdToVec
+import assinment.task5.ss
 import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, Word2Vec}
-import org.apache.spark.ml.linalg.{DenseMatrix, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, SparseVector, Vector, Vectors}
 
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
@@ -25,13 +26,16 @@ object task2 {
   import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
   def main(args: Array[String]): Unit = {
-    val inputFile = "../../Greek_Parliament_Proceedings_1989_2020_Clean_V2.csv"
+
+    ss.sparkContext.setLogLevel("ERROR")
+
+    val inputFile = ".././Greek_Parliament_Proceedings_1989_2020_Clean_V2.csv"
     println("Task2: reading from input file: " + inputFile)
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
     //sample set
-    val sampleDF = basicDF.sample(0.001, 1234)
+    val sampleDF = basicDF//.sample(0.001, 1234)
     // remove null values from df
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
@@ -43,16 +47,46 @@ object task2 {
 
     //val dfwordsTovec = worsdToVec(notnulldf).filter($"member_name" === "ζιωγας ηλια ιωαννης")//.agg($"features")
     val dfwordsTovec = worsdToVec(notnulldf).groupBy($"member_name").agg(Summarizer.mean($"features").alias("summed_features"))
-    dfwordsTovec.show(10, false)
 
     //create cosine similarity matrix
     //https://stackoverflow.com/questions/47010126/calculate-cosine-similarity-spark-dataframe
     //https://stackoverflow.com/questions/57530010/spark-scala-cosine-similarity-matrix
     //val temp = convertIndexedRowMatrixToRDD(convertDataFrameToIndexedMatrix(dfwordsTovec))
 
+    val wordsTovecrdd = dfwordsTovec.rdd.map(r=>( r(0).asInstanceOf[String],r(1).asInstanceOf[DenseVector]))
+    val cart = wordsTovecrdd.cartesian(wordsTovecrdd)
+    val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, cosineSimilarity(x._1._2.values,x._2._2.values)))
+    similarityies.take(10).foreach(println)
 
   }
 
+
+  //from https://gist.github.com/geekan/471cc0d10f7ecfc769fc
+  //==========================================================
+  def cosineSimilarity(x: Array[Double], y: Array[Double]): Double = {
+    require(x.length == y.length)
+    dotProduct(x, y)/(magnitude(x) * magnitude(y))
+  }
+
+  /*
+   * Return the dot product of the 2 arrays
+   * e.g. (a[0]*b[0])+(a[1]*a[2])
+   */
+  def dotProduct(x: Array[Double], y: Array[Double]): Double = {
+    (for((a, b) <- x zip y) yield a * b) sum
+  }
+
+  /*
+   * Return the magnitude of an array
+   * We multiply each element, sum it, then square root the result.
+   */
+  def magnitude(x: Array[Double]): Double = {
+    math.sqrt(x map(i => i*i) sum)
+  }
+
+
+
+  //============================================================
   def convertDataFrameToIndexedMatrix(df:DataFrame):IndexedRowMatrix = {
     val rows:Long = df.count()
     val cols = df.columns.length

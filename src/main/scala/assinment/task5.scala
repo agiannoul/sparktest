@@ -28,12 +28,25 @@ object task5 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.01, 1234)
+    val sampleDF = basicDF//.sample(0.01, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
     notnulldf.show()
+    val colname="political_party"
+    val distingnames = notnulldf.select(col(colname)).distinct().collect().map(r=>r(0).asInstanceOf[String])
+    //speeches per party
+    notnulldf.groupBy(col(colname)).count().show(20)
+
+    // how many parties a membmer has change
+    notnulldf.select($"political_party",$"member_name").distinct().groupBy("member_name").count().sort($"count".desc).show(false)
+  }
+  def statisticsColumn(colname: String, df :DataFrame):Any={
+
+
+
+
   }
 }

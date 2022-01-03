@@ -29,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.5, 1234)
+    val sampleDF = basicDF.sample(0.05, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set

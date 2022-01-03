@@ -29,13 +29,13 @@ object task2 {
 
     ss.sparkContext.setLogLevel("ERROR")
 
-    val inputFile = ".././Greek_Parliament_Proceedings_1989_2020_Clean_V2.csv"
+    val inputFile = "./Greek_Parliament_Proceedings_1989_2020_Clean_V2.csv"
     println("Task2: reading from input file: " + inputFile)
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
     //sample set
-    val sampleDF = basicDF//.sample(0.001, 1234)
+    val sampleDF = basicDF.sample(0.001, 1234)
     // remove null values from df
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
@@ -56,7 +56,7 @@ object task2 {
     val wordsTovecrdd = dfwordsTovec.rdd.map(r=>( r(0).asInstanceOf[String],r(1).asInstanceOf[DenseVector]))
     val cart = wordsTovecrdd.cartesian(wordsTovecrdd)
     val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, cosineSimilarity(x._1._2.values,x._2._2.values)))
-    similarityies.take(10).foreach(println)
+    similarityies.map(x=> (x._3,x._1,x._2)).top(10).foreach(println)
 
   }
 

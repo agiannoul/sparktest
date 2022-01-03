@@ -39,7 +39,9 @@ object task2 {
     // remove null values from df
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
-    val distinctValuesDF = notnulldf.select(notnulldf("member_name")).distinct
+    idfmethod(notnulldf)
+    /*
+    //val distinctValuesDF = notnulldf.select(notnulldf("member_name")).distinct
     //distinctValuesDF.show(5)
 
     //println(distinctValuesDF.count)
@@ -58,9 +60,58 @@ object task2 {
     val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, cosineSimilarity(x._1._2.values,x._2._2.values)))
     similarityies.map(x=> (x._3,x._1,x._2)).top(10).foreach(println)
 
+     */
+
   }
 
+  def idfmethod(notnulldf : DataFrame): Unit ={
 
+    val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
+
+    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech"))).persist()
+
+    val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
+    val wordsDF = tokenizer.transform(newDF)
+
+    val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
+    val featurizedDF = hashingTF.transform(wordsDF)
+
+    val idf = new IDF().setInputCol("rRawFeatures").setOutputCol("rFeatures")
+    val idfM = idf.fit(featurizedDF)
+    val completeDF = idfM.transform(featurizedDF)
+
+    val membemrfeaturedf =completeDF.select($"member_name",$"rFeatures".as("tf_ifd"))
+
+    val temp=membemrfeaturedf.rdd.map(x=> ( x(0).asInstanceOf[String],x(1).asInstanceOf[SparseVector])).groupByKey()
+    val aggregatedrdd =temp.map(x => (x._1,maxindex(x._2)))
+
+    val cart = aggregatedrdd.cartesian(aggregatedrdd)
+
+    val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, sparseSimilarity(x._1._2,x._2._2)))
+    similarityies.map(x=> (x._3,x._1,x._2)).top(10).foreach(println)
+  }
+  // iterable from group reduced to one sparsevector with max in each indice
+  def maxindex(vectors : Iterable[SparseVector]): SparseVector = {
+    //dot product
+    val result = vectors.reduce((x,y)=>{
+      val unionindices = x.indices.union(y.indices)
+      val sortunionindices = unionindices.distinct.sorted
+      val values = sortunionindices.map( i => max(x(i),y(i)))
+      val maxvector =new  SparseVector(x.size,sortunionindices,values)
+      maxvector
+    })
+    result
+  }
+  //cosine similarity of two spaese vector
+  def sparseSimilarity(x: SparseVector, y: SparseVector): Double = {
+    //dot product
+    val common_indicies=x.indices.intersect(y.indices)
+    val dotproduct = common_indicies.map(i => x(i) * y(i))
+      .foldLeft(implicitly[Numeric[Double]].zero)(_ + _)
+    val xmetro= math.sqrt(x.values.map(a => a * a).sum)
+    val ymetro= math.sqrt(y.values.map(a => a * a).sum)
+    dotproduct/(xmetro*ymetro)
+  }
   //from https://gist.github.com/geekan/471cc0d10f7ecfc769fc
   //==========================================================
   def cosineSimilarity(x: Array[Double], y: Array[Double]): Double = {

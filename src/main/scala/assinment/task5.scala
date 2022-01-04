@@ -30,23 +30,90 @@ object task5 {
     val basicDF = ss.read.option("header", "true").csv(inputFile)
     val sampleDF = basicDF//.sample(0.01, 1234)
     //sample set
-    //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
-    //ALL set
+
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
+    val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
-    notnulldf.show()
-    val colname="political_party"
-    val distingnames = notnulldf.select(col(colname)).distinct().collect().map(r=>r(0).asInstanceOf[String])
-    //speeches per party
-    notnulldf.groupBy(col(colname)).count().show(20)
+    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("speech"))).persist()
 
-    // how many parties a membmer has change
-    notnulldf.select($"political_party",$"member_name").distinct().groupBy("member_name").count().sort($"count".desc).show(false)
-  }
+    val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
+    val wordsDF = tokenizer.transform(newDF)
+
+    /*val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
+    val featurizedDF = hashingTF.transform(wordsDF)
+
+    val idf = new IDF().setInputCol("rRawFeatures").setOutputCol("rFeatures")
+    val idfM = idf.fit(featurizedDF)
+    val completeDF = idfM.transform(featurizedDF)
+
+     */
+
+    val enviroment = List("περιβάλλον","φύση","απόβλητα","ρύπανση","βιολογικός","ανανεώσιμες","πηγές","ενέργειας")
+    val economy = List("χρέος","φόρος","οικονομία","ανάπτυξη","ανεργία","εργασία","δάνειο","επίδομα","μνημόνιο")
+    val defence = List("τουρκία","γείτονα","άμυνα","κυριαρχικά","δικαιώματα","σύνορα","μεταναστευτικό")
+    val health = List("υγεία","νοσοκομεί","ιατρό","κλινικ","εμβόλι","φάρμακο","φαρμακ","εοδυ")
+
+    val udf_env = udf((s: Seq[String]) => {
+      var belong=false
+      val enviroment = List("περιβάλλον","φύση","απόβλητα","ρύπανση","βιολογικός","ανανεώσιμες","πηγές","ενέργειας")
+      for(e <- enviroment){
+        if(s.contains(e)){
+          belong=true
+        }
+      }
+      belong
+    })
+    val udf_econ = udf((s: Seq[String]) => {
+      var belong=false
+      val economy = List("χρέος","φόρος","οικονομία","ανάπτυξη","ανεργία","εργασία","δάνειο","επίδομα","μνημόνιο")
+      for(e <- economy){
+        if(s.contains(e)){
+          belong=true
+        }
+      }
+      belong
+    })
+
+    val udf_def= udf((s: Seq[String]) => {
+      var belong=false
+      val defence = List("εθνική","τουρκία","γείτονα","άμυνα","κυριαρχικά","δικαιώματα","σύνορα","μεταναστευτικό","πρεσπών")
+      for(e <- defence){
+        if(s.contains(e)){
+          belong=true
+        }
+      }
+      belong
+    })
+    val udf_health= udf((s: Seq[String]) => {
+      var belong=false
+      val health = List("υγεία","νοσοκομεί","ιατρό","κλινικ","εμβόλι","φάρμακο","φαρμακ","εοδυ")
+      for(e <- health){
+        if(s.contains(e)){
+          belong=true
+        }
+      }
+      belong
+    })
+
+    val env_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_env($"Words")).persist()
+    val eco_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_econ($"Words")).persist()
+    val def_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_def($"Words")).persist()
+    val health_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_health($"Words")).persist()
+
+    println(env_cluster.count())
+    println(eco_cluster.count())
+    println(def_cluster.count())
+    println(health_cluster.count())
+    statisticsColumn("political_party",env_cluster)
+    statisticsColumn("political_party",eco_cluster)
+    statisticsColumn("political_party",def_cluster)
+    statisticsColumn("political_party",health_cluster)
+
+    }
   def statisticsColumn(colname: String, df :DataFrame):Any={
-
-
-
-
+      val all=1.0*df.count()
+      val grouped=df.groupBy(colname).count().as("count")
+      val partdf=grouped.withColumn("participation",$"count"/all)
+      partdf.orderBy($"participation".desc).show(20)
   }
 }

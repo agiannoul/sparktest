@@ -30,20 +30,21 @@ object taks1 {
 
       // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
       val basicDF = ss.read.option("header", "true").csv(inputFile)
-      val sampleDF = basicDF.sample(0.01, 1234)
+      val sampleDF = basicDF.sample(0.2, 1234)
       //sample set
       //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
       //ALL set
-      val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
+      val colname = "clean_speech"
+      val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF(colname).isNotNull)
 
       //val keywordsofsampleData=algo_topics(notnulldf, ss)
       val Seg = 5
       val udf_segmentTime = udf((v: String) => (v.takeRight(4).toInt - 1989) / Seg)
 
-      val dfwithseg = notnulldf.select($"member_name", $"sitting_date", $"member_name", $"clean_speech", udf_segmentTime($"sitting_date").as("Segment"))
+      val dfwithseg = notnulldf.select($"member_name", $"sitting_date", $"member_name", col(colname), udf_segmentTime($"sitting_date").as("Segment"))
 
       //time consuming
-      val dfwordsTovec = worsdToVec(dfwithseg)
+      val dfwordsTovec = worsdToVec(dfwithseg,colname)
 
       println("ALG0")
       val loop = new Breaks;
@@ -63,6 +64,16 @@ object taks1 {
           })
         }
       }
+      println("Time: "+1989+" until "+2020)
+      var ccc=0
+      val keywordsofAll=algo_topics(dfwordsTovec,5)
+      keywordsofAll.foreach(x=>{
+        println("Cluster "+ccc)
+        println()
+        x.foreach(println)
+        println()
+        ccc+=1
+      })
     }
 
     //=====================================================================================================
@@ -80,10 +91,10 @@ object taks1 {
   // TODO look for faster/better word2Vec algorithm (tf-idf?)
   // Add a column of "features" based on column with name "clean_speech"->String
   // based on predefine algorithm
-  def worsdToVec(notnulldf: DataFrame): DataFrame ={
+  def worsdToVec(notnulldf: DataFrame,colname : String): DataFrame ={
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
-    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech"))).persist()
+    val newDF = notnulldf.withColumn("cleaner",udf_clean(col(colname))).persist()
 
     val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
     val wordsDF = tokenizer.transform(newDF)
@@ -126,7 +137,7 @@ object taks1 {
 
     //==================== TEST ==========================================
     val AllculsterKeyWords  = ListBuffer[Array[String]]()
-    for(clusterk <- 0 until(number_clusters-1)){
+    for(clusterk <- 0 until(number_clusters)){
       val cluster0 = predictions.filter(predictions("prediction") === clusterk)
       // TF-IDF
       val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
@@ -223,7 +234,7 @@ object taks1 {
     rdd0.filter(x => !filterstopwords(x._2)).top(n).map(x => x._2)
   }
   def filterstopwords(word: String): Boolean = {
-    word.endsWith("ώ") || word.endsWith("ω") || word.endsWith("ει") ||
+      word.exists(_.isDigit) ||
       word.endsWith("γιατί") || word.endsWith("αλλά") || word.endsWith("ότι") || word.endsWith("αυτό") ||
       word.endsWith("αυτή") || word.endsWith("αυτά") || word.endsWith("εσείς") || word.endsWith("αυτοί")
   }

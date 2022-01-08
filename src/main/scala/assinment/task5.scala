@@ -28,7 +28,7 @@ object task5 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF//.sample(0.01, 1234)
+    val sampleDF = basicDF.sample(0.01, 1234)
     //sample set
 
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
@@ -108,6 +108,12 @@ object task5 {
     statisticsColumn("political_party",eco_cluster)
     statisticsColumn("political_party",def_cluster)
     statisticsColumn("political_party",health_cluster)
+
+
+    statisticsColumn("member_name",env_cluster)
+    statisticsColumn("member_name",eco_cluster)
+    statisticsColumn("member_name",def_cluster)
+    statisticsColumn("member_name",health_cluster)
 
     }
   def statisticsColumn(colname: String, df :DataFrame):Any={

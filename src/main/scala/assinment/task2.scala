@@ -35,7 +35,7 @@ object task2 {
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
     //sample set
-    val sampleDF = basicDF.sample(0.001, 1234)
+    val sampleDF = basicDF.sample(0.5, 1234)
     // remove null values from df
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
@@ -68,7 +68,7 @@ object task2 {
 
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
-    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech"))).persist()
+    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech")))
 
     val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
     val wordsDF = tokenizer.transform(newDF)
@@ -112,41 +112,6 @@ object task2 {
     val ymetro= math.sqrt(y.values.map(a => a * a).sum)
     dotproduct/(xmetro*ymetro)
   }
-  //from https://gist.github.com/geekan/471cc0d10f7ecfc769fc
-  //==========================================================
-  def cosineSimilarity(x: Array[Double], y: Array[Double]): Double = {
-    require(x.length == y.length)
-    dotProduct(x, y)/(magnitude(x) * magnitude(y))
-  }
 
-  /*
-   * Return the dot product of the 2 arrays
-   * e.g. (a[0]*b[0])+(a[1]*a[2])
-   */
-  def dotProduct(x: Array[Double], y: Array[Double]): Double = {
-    (for((a, b) <- x zip y) yield a * b) sum
-  }
-
-  /*
-   * Return the magnitude of an array
-   * We multiply each element, sum it, then square root the result.
-   */
-  def magnitude(x: Array[Double]): Double = {
-    math.sqrt(x map(i => i*i) sum)
-  }
-
-
-
-  //============================================================
-  def convertDataFrameToIndexedMatrix(df:DataFrame):IndexedRowMatrix = {
-    val rows:Long = df.count()
-    val cols = df.columns.length
-    val rdd = df.rdd.map(
-      row => IndexedRow(rows, org.apache.spark.mllib.linalg.Vectors.dense(row.getAs[Seq[Double]](1).toArray)))
-    val row = new IndexedRowMatrix(rdd,rows,cols)
-    row
-  }
-
-  def convertIndexedRowMatrixToRDD(irm:IndexedRowMatrix):RDD[IndexedRow]=irm.rows
 
 }

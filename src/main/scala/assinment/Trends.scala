@@ -9,7 +9,7 @@ import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, monotonic
 
 import scala.collection.mutable.ListBuffer
 
-object OutlierDetection {
+object Trends {
   val ss = SparkSession.builder().master("local[*]").appName("assigment").config("spark.driver.memory","16g").getOrCreate()
   import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 

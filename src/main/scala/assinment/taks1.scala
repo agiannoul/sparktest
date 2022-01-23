@@ -236,7 +236,7 @@ object taks1 {
   
   
   def filterstopwords(word: String): Boolean = {
-    word.endsWith("ώ") || word.endsWith("ω") || word.endsWith("ει") || word.length > 3 ||
+    word.endsWith("ώ") || word.endsWith("ω") || word.endsWith("ει") || word.length <= 3 ||
       word.endsWith("γιατί") || word.endsWith("αλλά") || word.endsWith("ότι") || word.endsWith("αυτό") ||
       word.endsWith("αυτή") || word.endsWith("αυτά") || word.endsWith("εσείς") || word.endsWith("αυτοί") ||
       word.endsWith("καλά") || word.endsWith("εμείς") || word.endsWith("λέτε") || word.endsWith("μόνο") ||

@@ -233,11 +233,27 @@ object taks1 {
     //rdd0.filter(x => !filterstopwords(x._2)).take(n).foreach(println)
     rdd0.filter(x => !filterstopwords(x._2)).top(n).map(x => x._2)
   }
+  
+  
   def filterstopwords(word: String): Boolean = {
-      word.exists(_.isDigit) ||
+    word.endsWith("ώ") || word.endsWith("ω") || word.endsWith("ει") || word.length > 3 ||
       word.endsWith("γιατί") || word.endsWith("αλλά") || word.endsWith("ότι") || word.endsWith("αυτό") ||
-      word.endsWith("αυτή") || word.endsWith("αυτά") || word.endsWith("εσείς") || word.endsWith("αυτοί")
+      word.endsWith("αυτή") || word.endsWith("αυτά") || word.endsWith("εσείς") || word.endsWith("αυτοί") ||
+      word.endsWith("καλά") || word.endsWith("εμείς") || word.endsWith("λέτε") || word.endsWith("μόνο") ||
+      word.endsWith("οποία") || word.endsWith("αυτήν") || word.endsWith("δεκτό") || word.endsWith("μαι") ||
+      word.endsWith("πολύ") || word.endsWith("όλος") || word.endsWith("είναι") || word.endsWith("όχι") ||
+      word.endsWith("όπως") || word.endsWith("δύο") || word.endsWith("εάν") || word.endsWith("όμως") ||
+      word.endsWith("οποίο") || word.endsWith("όταν") || word.endsWith("όσα") || word.endsWith("τώρα") ||
+      word.endsWith("έχουν") || word.endsWith("κύριοι") || word.endsWith("κύριος") || word.endsWith("κυρία") ||
+      word.endsWith("θέμα") || word.endsWith("λόγο") || word.endsWith("έτσι") || word.endsWith("ήταν") ||
+      word.endsWith("όπου") || word.endsWith("τρία") || word.endsWith("τίποτα") || word.endsWith("υπέρ") ||
+      word.endsWith("σήμερα") || word.endsWith("ίδιος") || word.endsWith("ούτε") || word.endsWith("λοιπόν") ||
+      word.endsWith("επειδή") || word.endsWith("συνεπώς") || word.endsWith("πώς") || word.endsWith("αυτές") ||
+      word.endsWith("αφού") || word.endsWith("ορίστε") || word.endsWith("δηλαδή") || word.endsWith("αρχή") ||
+      word.endsWith("έχετε") || word.endsWith("σχετικά") || word.endsWith("λεπτό") || word.endsWith("πρόεδρος") ||
+      word.endsWith("υπουργέ") || word.endsWith("συνάδελφος") || word.endsWith("υπουργός")
   }
+  
   def time[R](block: => R): R = {
     val t0 = System.nanoTime()
     val result = block    // call-by-name

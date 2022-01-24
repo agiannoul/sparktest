@@ -84,7 +84,7 @@ object Trends {
     val trendsDf = transformed.withColumn("topic_id",udf_max_topic($"topicDistribution")).select("sitting_date","topic_id")
     val trendrdd = trendsDf.rdd.map(r=>((r(0).asInstanceOf[String],r(1).asInstanceOf[Int]),1)).reduceByKey(_+_).map(r=>(r._1._1,(r._1._2,r._2))) //((date,topic_id),count)
     val trend_date = trendrdd.groupByKey().map(r=> (r._1,iter_to_ArrayFreq(r._2)))
-    trend_date.map(r=>""+r._1+","+r._2.mkString(",")).coalesce(1).saveAsTextFile("./tmp/task6/")
+    trend_date.map(r=>""+r._1+","+r._2.mkString(",")).coalesce(1).saveAsTextFile("./tmp/task6Topics/")
 
      /*/
 

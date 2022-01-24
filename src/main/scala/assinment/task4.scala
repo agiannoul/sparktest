@@ -55,8 +55,8 @@ object task4 {
 //      val finalSpeechesAfter = afterCrisisDF
 //        .filter(x => existingParties.exists(x(1).toString.contains(_)))
 
-      val dfwordsTovecAfter = worsdToVec(afterCrisisDF.filter(x => checkForParty(x(1).toString)))
-      val dfwordsTovecBefore = worsdToVec(beforeCrisisDF.filter(x => checkForParty(x(1).toString)))
+      val dfwordsTovecAfter = worsdToVec(afterCrisisDF.filter(x => checkForParty(x(1).toString)),"clean_speech")
+      val dfwordsTovecBefore = worsdToVec(beforeCrisisDF.filter(x => checkForParty(x(1).toString)),"clean_speech")
 
       val existingParties = List("συνασπισμος ριζοσπαστικης αριστερας", "νεα δημοκρατια",
         "κομμουνιστικο κομμα ελλαδας", "πανελληνιο σοσιαλιστικο κινημα", "εξωκοινοβουλευτικός",

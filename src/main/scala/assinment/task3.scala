@@ -29,7 +29,7 @@ object task3 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.05, 1234)
+    val sampleDF = basicDF//.sample(0.05, 1234)
     //sample set
     //val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
     //ALL set
@@ -132,7 +132,7 @@ object task3 {
 
         i += 1
       }
-      ImageIO.write(image, "jpg", new File("./tmp/spark_output/"+name+"_image.jpg"))
+      ImageIO.write(image, "jpg", new File("./tmp/task3/"+name+"_image.jpg"))
 
     } catch {
       case e: Exception =>
@@ -192,8 +192,8 @@ object task3 {
     (dotMatrix,segmentIndex.toList)
   }
 
-  // Tf-IDf in speeches of sing;e member/party
-  // take to 40 words
+  // Tf-IDf in speeches of single member/party
+  // take top N words
   def analysisOfspecificmemberDf(name :String,specific_member_df: DataFrame,N:Int): (String,Array[String],Array[Double])={
 
 

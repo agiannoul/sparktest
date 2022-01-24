@@ -28,7 +28,7 @@ object task5 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.01, 1234)
+    val sampleDF = basicDF//.sample(0.01, 1234)
     //sample set
 
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
@@ -51,7 +51,7 @@ object task5 {
 
     val udf_env = udf((s: Seq[String]) => {
       var belong=false
-      val enviroment = List("περιβάλλον","φύση","απόβλητα","ρύπανση","βιολογικός","ανανεώσιμες","πηγές","ενέργειας")
+      val enviroment = List("περιβάλλον","φύση","απόβλητα","ρύπανση","βιολογικός","ανανεώσιμες","πηγές","ενέργει","κλίμα","κλιματικ","περιβαλλον")
       for(e <- enviroment){
         if(s.contains(e)){
           belong=true
@@ -61,7 +61,7 @@ object task5 {
     })
     val udf_econ = udf((s: Seq[String]) => {
       var belong=false
-      val economy = List("χρέος","φόρος","οικονομία","ανάπτυξη","ανεργία","εργασία","δάνειο","επίδομα","μνημόνιο")
+      val economy = List("χρέος","φόρος","οικονομία","ανάπτυξη","ανεργία","εργασία","δάνειο","επίδομα","μνημόνιο","λιτότητα","οικονομ","τράπεζ","φορο","ανεργ","επίδομα")
       for(e <- economy){
         if(s.contains(e)){
           belong=true
@@ -72,7 +72,7 @@ object task5 {
 
     val udf_def= udf((s: Seq[String]) => {
       var belong=false
-      val defence = List("εθνική","τουρκία","γείτονα","άμυνα","κυριαρχικά","δικαιώματα","σύνορα","μεταναστευτικό","πρεσπών")
+      val defence = List("εθνική","τουρκία","γείτονα","άμυνα","κυριαρχικά","δικαιώματα","σύνορα","μεταναστευτικό","πρεσπών","πρόσφυγ","προσφυγ","στρατι","στρατός","όπλο","ένοπλ","αμύνης")
       for(e <- defence){
         if(s.contains(e)){
           belong=true
@@ -82,7 +82,7 @@ object task5 {
     })
     val udf_health= udf((s: Seq[String]) => {
       var belong=false
-      val health = List("υγεία","νοσοκομεί","ιατρό","κλινικ","εμβόλι","φάρμακο","φαρμακ","εοδυ")
+      val health = List("υγεία","νοσοκομεί","ιατρό","κλινικ","εμβόλι","φάρμακ","φαρμακ","εοδυ","υγει","ιατρ","γρίπη")
       for(e <- health){
         if(s.contains(e)){
           belong=true
@@ -90,7 +90,7 @@ object task5 {
       }
       belong
     })
-
+    statisticsColumn("political_party",wordsDF.select($"member_name",$"political_party",$"Words"))
     val env_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_env($"Words")).persist()
     val eco_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_econ($"Words")).persist()
     val def_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_def($"Words")).persist()

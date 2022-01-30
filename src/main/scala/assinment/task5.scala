@@ -96,26 +96,56 @@ object task5 {
     val def_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_def($"Words")).persist()
     val health_cluster = wordsDF.select($"member_name",$"political_party",$"Words").filter(udf_health($"Words")).persist()
 
-    println(env_cluster.count())
-    println(eco_cluster.count())
-    println(def_cluster.count())
-    println(health_cluster.count())
+    //println(env_cluster.count())
+    //println(eco_cluster.count())
+    //println(def_cluster.count())
+    //println(health_cluster.count())
     statisticsColumn("political_party",env_cluster)
     statisticsColumn("political_party",eco_cluster)
     statisticsColumn("political_party",def_cluster)
     statisticsColumn("political_party",health_cluster)
 
 
-    statisticsColumn("member_name",env_cluster)
-    statisticsColumn("member_name",eco_cluster)
-    statisticsColumn("member_name",def_cluster)
-    statisticsColumn("member_name",health_cluster)
+    //statisticsColumn("member_name",env_cluster)
+    //statisticsColumn("member_name",eco_cluster)
+    //statisticsColumn("member_name",def_cluster)
+    //statisticsColumn("member_name",health_cluster)
 
+
+    statisticsColumnScaled("political_party",env_cluster,wordsDF)
+    statisticsColumnScaled("political_party",eco_cluster,wordsDF)
+    statisticsColumnScaled("political_party",def_cluster,wordsDF)
+    statisticsColumnScaled("political_party",health_cluster,wordsDF)
     }
   def statisticsColumn(colname: String, df :DataFrame):Any={
       val all=1.0*df.count()
       val grouped=df.groupBy(colname).count().as("count")
       val partdf=grouped.withColumn("participation",$"count"/all)
-      partdf.orderBy($"participation".desc).show(20)
+      val n: Int= partdf.count().asInstanceOf[Int]
+      partdf.orderBy($"participation".desc).show(n,false)
+  }
+  def statisticsColumnScaled(colname: String, df :DataFrame,wordsdf : DataFrame):Any={
+    val all=1.0*df.count()
+    val all2=1.0*wordsdf.count()
+    val grouped=df.groupBy(colname).count().as("count")
+    val thematicpart=grouped.withColumn("participation",$"count"/all)
+    //partdf.orderBy($"participation".desc)
+
+    val grouped2=wordsdf.groupBy(colname).count().as("count")
+    val generalpart=grouped2.withColumn("participation",$"count"/all2)
+    val array=generalpart.select(colname,"participation").collect().map(r=>(r(0).asInstanceOf[String],r(1).asInstanceOf[Double]))
+
+    val udf_scaledpart= udf((s: String,p: Double) => {
+      var newpart:Double=0.0
+      array.foreach(t=>{
+        if (t._1.equals(s)){
+          newpart=p/t._2
+        }
+      })
+      newpart
+    })
+    val n: Int= thematicpart.count().asInstanceOf[Int]
+    thematicpart.select(col(colname),udf_scaledpart(col(colname),$"participation").as("Scaled_participation")).orderBy($"Scaled_participation".desc).show(n,false)
+
   }
 }

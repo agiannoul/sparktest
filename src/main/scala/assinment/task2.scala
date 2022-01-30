@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import spire.math.Polynomial.x
 
 object task2 {
-  val ss = SparkSession.builder().master("local[*]").appName("assigment").getOrCreate()
+  val ss = SparkSession.builder().master("local[*]").config("spark.driver.memory","14g").appName("assigment").getOrCreate()
   import ss.implicits._ // For implicit conversions like converting RDDs to DataFrames
 
   def main(args: Array[String]): Unit = {
@@ -35,7 +35,7 @@ object task2 {
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
     //sample set
-    val sampleDF = basicDF.sample(0.5, 1234)
+    val sampleDF = basicDF//.sample(0.1, 1234)
     // remove null values from df
     val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
 
@@ -88,7 +88,8 @@ object task2 {
     val cart = aggregatedrdd.cartesian(aggregatedrdd)
 
     val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, sparseSimilarity(x._1._2,x._2._2)))
-    similarityies.map(x=> (x._3,x._1,x._2)).top(10).foreach(println)
+    //println(similarityies.count())
+    similarityies.map(x=> (x._3,x._1,x._2)).take(20).foreach(println)
   }
   // iterable from group reduced to one sparsevector with max in each indice
   def maxindex(vectors : Iterable[SparseVector]): SparseVector = {

@@ -72,7 +72,7 @@ object Trends {
     val lda = new LDA().setK(20).setMaxIter(20).setFeaturesCol("features")
     val model = lda.fit(completeDF)
 
-    model.describeTopics(200).rdd.map(x=>x(1).asInstanceOf[Seq[Int]]).map(x=>x.map(index=>vectorizer.vocabulary(index))).coalesce(1).saveAsTextFile("./tmp/task6Topics/")
+      model.describeTopics(200).rdd.map(x=>x(1).asInstanceOf[Seq[Int]]).map(x=>x.map(index=>vectorizer.vocabulary(index))).coalesce(1).saveAsTextFile("./tmp/task6Topics/")
 
     val transformed = model.transform(completeDF)
 

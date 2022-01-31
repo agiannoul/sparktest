@@ -43,7 +43,7 @@ object task3 {
     val Seg = 1 //1 d-> for each year
     val udf_segmentTime = udf((v: String) => (v.takeRight(4).toInt - 1989) / Seg)
     val dfwithseg = newDF.select($"member_name", $"political_party", $"cleaner", udf_segmentTime($"sitting_date").as("Segment"))
-    val colname="political_party"
+    val colname="member_name"
 
     //analysis for each year
 

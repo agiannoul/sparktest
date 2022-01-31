@@ -68,10 +68,15 @@ object task2 {
 
     val udf_clean = udf((s: String) => s.replaceAll("""([\p{Punct}&&[^.]]|\b\p{IsLetter}{1,2}\b)\s*""", ""))
 
-    val newDF = notnulldf.withColumn("cleaner",udf_clean(col("clean_speech")))
+    val newDF = notnulldf.withColumn("cleaner", udf_clean(col("clean_speech")))
+    val countdf=notnulldf.groupBy("member_name").count().filter($"count" >= 2500)
+    val names97=countdf.select("member_name").collect().map(x=>x.get(0).asInstanceOf[String])
+    println(countdf.count())
+    val isin97 = udf((s: String) => names97.contains(s))
 
+    val newDF97=newDF.filter(isin97($"member_name"))
     val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
-    val wordsDF = tokenizer.transform(newDF)
+    val wordsDF = tokenizer.transform(newDF97)
 
     val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
     val featurizedDF = hashingTF.transform(wordsDF)
@@ -87,9 +92,9 @@ object task2 {
 
     val cart = aggregatedrdd.cartesian(aggregatedrdd)
 
-    val similarityies = cart.filter(u=> u._1._1 != u._2._1).map(x=> (x._1._1 ,x._2._1, sparseSimilarity(x._1._2,x._2._2)))
+    val similarityies = cart.filter(u=> u._1._1.compare(u._2._1)>0).map(x=> (x._1._1 ,x._2._1, sparseSimilarity(x._1._2,x._2._2)))
     //println(similarityies.count())
-    similarityies.map(x=> (x._3,x._1,x._2)).take(20).foreach(println)
+    similarityies.map(x=> (x._3,x._1,x._2)).top(20).foreach(println)
   }
   // iterable from group reduced to one sparsevector with max in each indice
   def maxindex(vectors : Iterable[SparseVector]): SparseVector = {

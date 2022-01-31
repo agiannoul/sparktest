@@ -132,7 +132,7 @@ object task3 {
 
         i += 1
       }
-      ImageIO.write(image, "jpg", new File("./tmp/task3/"+name+"_image.jpg"))
+      ImageIO.write(image, "jpg", new File("./tmp/task3members/"+name+"_image.jpg"))
 
     } catch {
       case e: Exception =>

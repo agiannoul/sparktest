@@ -126,7 +126,7 @@ object taks1 {
   //Cluster features with k-means
   //calculate tf,idf
   //keep values from sparse vector and calculate keywords (method2keywords) in each cluster
-  def algo_topics(featureDf: DataFrame,number_clusters: Int): List[Array[String]] = {
+  def algo_topics(featureDf: DataFrame,number_clusters: Int): List[Array[(String,Double)]] = {
 
 
     val kmeans = new KMeans().setK(number_clusters).setSeed(1L).setMaxIter(100)
@@ -136,7 +136,7 @@ object taks1 {
     //======================= OK ========================================
 
     //==================== TEST ==========================================
-    val AllculsterKeyWords  = ListBuffer[Array[String]]()
+    val AllculsterKeyWords  = ListBuffer[Array[(String,Double)]]()
     for(clusterk <- 0 until(number_clusters)){
       val cluster0 = predictions.filter(predictions("prediction") === clusterk)
       // TF-IDF
@@ -189,7 +189,7 @@ object taks1 {
   }
 
   // keep most significant words based on tfidf and distance from the center of cluster.
-  def method2keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int): Array[String] = {
+  def method2keywords(completeTF_IDF_DF: DataFrame, n: Int, k: Int): Array[(String,Double)] = {
     val most_significant_k = udf((Words: List[String], tfidf: Array[Double]) => {
       var sign_words = List[String]()
       for (i <- 0 until min(k, Words.size)) {
@@ -214,8 +214,6 @@ object taks1 {
       }
 
       sign_tfidf
-
-
     })
 
     val mswords = completeTF_IDF_DF.select(most_significant_k($"Words", $"tf_idf_value").as("sign_words"), $"dist", most_significant_k_tfidf($"Words", $"tf_idf_value").as("sign_tf_idf"))
@@ -231,7 +229,7 @@ object taks1 {
 
 
     //rdd0.filter(x => !filterstopwords(x._2)).take(n).foreach(println)
-    rdd0.filter(x => !filterstopwords(x._2)).top(n).map(x => x._2)
+    rdd0.filter(x => !filterstopwords(x._2)).top(n).map(x => (x._2,x._1))
   }
   
   

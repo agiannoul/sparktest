@@ -39,15 +39,6 @@ object task5 {
     val tokenizer = new Tokenizer().setInputCol("cleaner").setOutputCol("Words")
     val wordsDF = tokenizer.transform(newDF)
 
-    /*val hashingTF = new HashingTF().setInputCol("Words").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
-    val featurizedDF = hashingTF.transform(wordsDF)
-
-    val idf = new IDF().setInputCol("rRawFeatures").setOutputCol("rFeatures")
-    val idfM = idf.fit(featurizedDF)
-    val completeDF = idfM.transform(featurizedDF)
-
-     */
-
 
     val udf_env = udf((s: Seq[String]) => {
       var belong=false
@@ -117,6 +108,7 @@ object task5 {
     statisticsColumnScaled("political_party",def_cluster,wordsDF)
     statisticsColumnScaled("political_party",health_cluster,wordsDF)
     }
+  // Participation in df
   def statisticsColumn(colname: String, df :DataFrame):Any={
       val all=1.0*df.count()
       val grouped=df.groupBy(colname).count().as("count")
@@ -124,6 +116,7 @@ object task5 {
       val n: Int= partdf.count().asInstanceOf[Int]
       partdf.orderBy($"participation".desc).show(n,false)
   }
+  //  participation divided by participation in all Dataset
   def statisticsColumnScaled(colname: String, df :DataFrame,wordsdf : DataFrame):Any={
     val all=1.0*df.count()
     val all2=1.0*wordsdf.count()

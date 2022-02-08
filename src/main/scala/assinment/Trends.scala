@@ -58,13 +58,6 @@ object Trends {
 
     val df2 = df.filter(removeEmpty($"Words_clean"))
 
-//    val hashingTF = new HashingTF().setInputCol("Words_clean").setOutputCol("rRawFeatures") //.setNumFeatures(20000)
-//    val featurizedDF = hashingTF.transform(df2)
-//
-//    val idf = new IDF().setInputCol("rRawFeatures").setOutputCol("features")
-//    val idfM = idf.fit(featurizedDF)
-//    val completeDF = idfM.transform(featurizedDF).drop("rRawFeatures")
-
 
     val vectorizer  : CountVectorizerModel = new CountVectorizer().setInputCol("Words_clean").setOutputCol("features").fit(df2)
     val completeDF= vectorizer.transform(df2)
@@ -86,16 +79,6 @@ object Trends {
     val trend_date = trendrdd.groupByKey().map(r=> (r._1,iter_to_ArrayFreq(r._2)))
     trend_date.map(r=>""+r._1+","+r._2.mkString(",")).coalesce(1).saveAsTextFile("./tmp/task6Topics/")
 
-     /*/
-
-    //=====================outlier detection====================================
-    val topicsDf = transformed.withColumn("topic_id",udf_max_topic($"topicDistribution")).select("topic_id","Words_clean","features")
-    val typedrdd=topicsDf.rdd.map(r=>(r(0).asInstanceOf[Int],(r(1).asInstanceOf[Seq[String]],r(2).asInstanceOf[Vector[Double]])))
-    for(topicc <- 0 to 19){
-      typedrdd.sample(false,0.1)
-    }
-
-    */
 
   }
   def filterstopwords(word: String): Boolean = {

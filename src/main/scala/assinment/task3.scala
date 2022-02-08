@@ -80,20 +80,6 @@ object task3 {
 
 
     partiesrdd.collect().foreach(x=> {
-      /*println(x._1+" :")
-      print("[ ")
-      for(ar <- x._2._1){
-        print("[ ")
-        for(item <- ar){
-          print(item+", ")
-        }
-        print("]")
-        println()
-      }
-      print("]")
-      println()
-      println()
-      */
       imagecreation(x._2._1,x._1.replaceAll(" ","_"))
     })
 
@@ -169,26 +155,6 @@ object task3 {
       segmentIndex.append(seg._4)
       countseg+=1
     }
-    /*
-    //normallization based on diagonal values
-    var i=0
-    for(ar <-dotMatrix){
-      var j=0
-      for(value <- ar){
-        if(i != j){
-          val normalized = value/dotMatrix(i)(i)
-          dotMatrix(i)(j)=normalized
-        }
-        j+=1
-      }
-      i+=1
-    }
-    i=0
-    for(ar <-dotMatrix){
-      dotMatrix(i)(i)=1
-      i+=1
-    }
-  */
     (dotMatrix,segmentIndex.toList)
   }
 

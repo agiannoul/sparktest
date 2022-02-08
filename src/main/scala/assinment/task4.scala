@@ -1,16 +1,17 @@
 package assinment
 
-import assinment.taks1.{filterstopwords, ss, time, worsdToVec}
+import assinment.taks1.{filterstopwords, worsdToVec}
 import org.apache.log4j.{Level, LogManager}
 import org.apache.spark.ml.feature.{HashingTF, IDF}
-import org.apache.spark.ml.linalg.{SparseVector}
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.ml.linalg.SparseVector
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 
-import scala.math.{min}
-import scala.util.control.Breaks
+import scala.math.min
 
 object task4 {
+
+  val ss = SparkSession.builder().master("local[*]").appName("assigment").getOrCreate()
 
   def main(args: Array[String]): Unit = {
 
@@ -24,78 +25,55 @@ object task4 {
 
     // Read the contents of the csv file in a dataframe. The csv file does not contain a header.
     val basicDF = ss.read.option("header", "true").csv(inputFile)
-    val sampleDF = basicDF.sample(0.01, 1234)
-    //sample set
-//    val notnulldf = sampleDF.filter(sampleDF("member_name").isNotNull && sampleDF("clean_speech").isNotNull)
-    //ALL set
     val notnulldf = basicDF.filter(basicDF("member_name").isNotNull && basicDF("clean_speech").isNotNull)
 
     notnulldf.persist()
-    val timeee = time {
+    val beforeCrisisYears = udf((v: String) => v.takeRight(4).toInt >= 2000 && v.takeRight(4).toInt < 2009)
+    val beforeCrisisDF = notnulldf.filter(beforeCrisisYears(col("sitting_date"))).select("member_name", "political_party", "clean_speech")
 
-      val beforeCrisisYears = udf((v: String) => v.takeRight(4).toInt >= 2000 && v.takeRight(4).toInt < 2009)
-      val beforeCrisisDF = notnulldf.filter(beforeCrisisYears(col("sitting_date"))).select("member_name", "political_party", "clean_speech")
+    // set 2017 as upper bound as after this year the crisis was not the hottest topic
+    val afterCrisisYears = udf((v: String) => v.takeRight(4).toInt >= 2009 && v.takeRight(4).toInt <= 2017)
+    val afterCrisisDF = notnulldf.filter(afterCrisisYears(col("sitting_date"))).select("member_name", "political_party", "clean_speech")
 
-      // set 2017 as upper bound as after this year the crisis was not the hottest topic
-      val afterCrisisYears = udf((v: String) => v.takeRight(4).toInt >= 2009 && v.takeRight(4).toInt <= 2017)
-      val afterCrisisDF = notnulldf.filter(afterCrisisYears(col("sitting_date"))).select("member_name", "political_party", "clean_speech")
+    val dfwordsTovecAfter = worsdToVec(afterCrisisDF.filter(x => checkForParty(x(1).toString)), "clean_speech")
+    val dfwordsTovecBefore = worsdToVec(beforeCrisisDF.filter(x => checkForParty(x(1).toString)), "clean_speech")
 
-//      val existingPartiesBefore = beforeCrisisDF.select("political_party").distinct().collect()
-//        .toList.map(x => x.mkString)
-//      val existingPartiesAfter = afterCrisisDF.select("political_party").distinct().collect()
-//        .toList.map(x => x.mkString)
-//
-//      val politicalLeaders = beforeCrisisDF.select("member_name").distinct()
-//        .filter(x => checkForLeader(x(0).toString)).collect().toList.map(x=> x.mkString)
-//      val existingParties = existingPartiesBefore.intersect(existingPartiesAfter)
-//
-//      val finalSpeechesBefore = beforeCrisisDF
-//        .filter(x => existingParties.exists(x(1).toString.contains(_)))
-//
-//      val finalSpeechesAfter = afterCrisisDF
-//        .filter(x => existingParties.exists(x(1).toString.contains(_)))
-
-      val dfwordsTovecAfter = worsdToVec(afterCrisisDF.filter(x => checkForParty(x(1).toString)),"clean_speech")
-      val dfwordsTovecBefore = worsdToVec(beforeCrisisDF.filter(x => checkForParty(x(1).toString)),"clean_speech")
-
-      val existingParties = List("συνασπισμος ριζοσπαστικης αριστερας", "νεα δημοκρατια",
-        "κομμουνιστικο κομμα ελλαδας", "πανελληνιο σοσιαλιστικο κινημα", "εξωκοινοβουλευτικός",
-        "ανεξαρτητοι (εκτος κομματος)", "λαικος ορθοδοξος συναγερμος")
-      val politicalLeaders = List("καραμανλης αλεξανδρου κωνσταντινος", "σαμαρας κωνσταντινου αντωνιος",
+    val existingParties = List("συνασπισμος ριζοσπαστικης αριστερας", "νεα δημοκρατια",
+      "κομμουνιστικο κομμα ελλαδας", "πανελληνιο σοσιαλιστικο κινημα", "εξωκοινοβουλευτικός",
+      "ανεξαρτητοι (εκτος κομματος)", "λαικος ορθοδοξος συναγερμος")
+    val politicalLeaders = List("καραμανλης αλεξανδρου κωνσταντινος", "σαμαρας κωνσταντινου αντωνιος",
       "παπαρηγα νικολαου αλεξανδρα", "βενιζελος βασιλειου ευαγγελος", "παπανδρεου ανδρεα γεωργιος")
 
-      for (party <- existingParties) {
-        val partyAfterDF = dfwordsTovecAfter.filter(x => x(1).toString.equals(party))
-        val partyBeforeDF = dfwordsTovecBefore.filter(x => x(1).toString.equals(party))
-        println(party)
-        println("before")
-        val before = calcKeywords(partyBeforeDF)
-        println(before.mkString(", "))
-        println("after")
-        val after = calcKeywords(partyAfterDF)
-        println(after.mkString(", "))
-        println("diff")
-        println(before.union(after).distinct.filter(s => !before.intersect(after).contains(s)).mkString(", "))
-      }
-
-      println("\n\n\n")
-      for (leader <- politicalLeaders) {
-        val partyAfterDF = dfwordsTovecAfter.filter(x => x(0).toString.equals(leader))
-        val partyBeforeDF = dfwordsTovecBefore.filter(x => x(0).toString.equals(leader))
-        val before = calcKeywords(partyBeforeDF)
-        val after = calcKeywords(partyAfterDF)
-        val diff = before.union(after).distinct.filter(s => !before.intersect(after).contains(s))
-
-        println(leader)
-        println("before")
-        println(before.mkString(", "))
-        println("after")
-        println(after.mkString(", "))
-        println("diff")
-        println(diff.mkString(", "))
-      }
+    for (party <- existingParties) {
+      val partyAfterDF = dfwordsTovecAfter.filter(x => x(1).toString.equals(party))
+      val partyBeforeDF = dfwordsTovecBefore.filter(x => x(1).toString.equals(party))
+      println(party)
+      println("before")
+      val before = calcKeywords(partyBeforeDF)
+      println(before.mkString(", "))
+      println("after")
+      val after = calcKeywords(partyAfterDF)
+      println(after.mkString(", "))
+      println("diff")
+      println(before.union(after).distinct.filter(s => !before.intersect(after).contains(s)).mkString(", "))
     }
-    println(timeee)
+
+    println("\n\n\n")
+    for (leader <- politicalLeaders) {
+      val partyAfterDF = dfwordsTovecAfter.filter(x => x(0).toString.equals(leader))
+      val partyBeforeDF = dfwordsTovecBefore.filter(x => x(0).toString.equals(leader))
+      val before = calcKeywords(partyBeforeDF)
+      val after = calcKeywords(partyAfterDF)
+      val diff = before.union(after).distinct.filter(s => !before.intersect(after).contains(s))
+
+      println(leader)
+      println("before")
+      println(before.mkString(", "))
+      println("after")
+      println(after.mkString(", "))
+      println("diff")
+      println(diff.mkString(", "))
+    }
   }
 
   def checkForLeader(member: String): Boolean = {
